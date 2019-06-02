@@ -1,0 +1,158 @@
+---
+title: "Machine Learning Project"
+author: "Silvia Romero"
+date: "28 May 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Prediction Assignment Writeup
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data for this Project:
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Objective
+
+The goal of the project is to predict the manner in which the participants did the exercise. This is the "classe" variable in the training set. Any of the other variables can be used for the prediction. 
+- Describe how the model is built
+- Describe how your cross validation was used
+- Conclusions about the expected out of sample error and why that particular model has been chosen
+- Use the prediction model to predict 20 different test cases.
+
+## Loading Libraries
+```{r pack, echo=FALSE}
+library(caret)
+library(lattice)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+```
+
+## Loading and Cleaning the Data
+```{r data, echo=FALSE}
+# replacing N/A or errors with ""
+training <- read.csv("pml-training.csv",  na.strings=c("NA","#DIV/0!",""))
+testing<-read.csv("pml-testing.csv" ,  na.strings=c("NA","#DIV/0!",""))
+```
+
+- Remove all columns that contains NA and remove features that are not in the testing dataset.
+- First 7 columns or features of both datasets are not relevant as they are not numeric values, so they can be excluded.
+
+```{r Cdata, echo=FALSE}
+    features<-names(testing[,colSums(is.na(testing)) == 0])[8:59]
+    trainingI <- training[,c(features,"classe")]
+    testingI <- testing[,c(features,"problem_id")]
+```
+
+Dimensions of both datasets:
+```{r Dim, echo=FALSE}
+dim(training); dim(testing);
+```
+
+## Partitioning the Training Dataset
+As a good practice for Machine Learning Prediction problems, the datasets should be splited for training and testing purposes, being 80% / 20% a good partition. So 20% set will be used for Cross Validation of the 80% Trained Set.
+
+Therefore, let's split the Training Dataset:
+
+```{r Part, echo=FALSE}
+Train <- createDataPartition(trainingI$classe, p=0.8, list=FALSE)
+training <- trainingI[Train,]
+testing <- trainingI[-Train,]
+
+dim(training); dim(testing);
+```
+
+
+## Modelling to Predict Feature 'classe'
+## 1.a) Decision Tree
+ 
+```{r tree, echo=FALSE}
+set.seed(12345)
+modFitDT <- rpart(classe ~ ., data = training, method="class", control = rpart.control(method = "cv", number = 10))
+fancyRpartPlot(modFitDT)
+```
+## 1.b) Prediction via Decision Tree Model
+
+```{r tree2, echo=FALSE}
+set.seed(12345)
+
+prediction <- predict(modFitDT, testing, type = "class")
+confusionMatrix(prediction, testing$classe)
+```
+
+
+## 2.a) Random Forest
+```{r randomf, echo=FALSE}
+set.seed(12345)
+
+modFitRF <- randomForest(classe ~ ., data = training, method = "rf", importance = T, trControl = trainControl(method = "cv", classProbs=TRUE,savePredictions=TRUE,allowParallel=TRUE, number = 10))
+
+plot(modFitRF)
+```
+
+## 2.b) Prediction via Random Forest Model
+```{r randomf2, echo=FALSE}
+prediction <- predict(modFitRF, testing, type = "class")
+confusionMatrix(prediction, testing$classe)
+```
+
+## 3.a) Stochastic Gradient Boosting
+```{r stocGrad, echo=FALSE}
+modFitBoost <- train(classe ~ ., method = "gbm", data = training,
+                    verbose = F, 
+                    trControl = trainControl(method = "cv", number = 10))
+
+modFitBoost
+plot(modFitBoost)
+```
+## 3.b) Prediction via Boosting Model
+```{r stocGrad2, echo=FALSE}
+prediction <- predict(modFitRF, testing, type = "class")
+confusionMatrix(prediction, testing$classe)
+```
+
+## Prediction using the Testing dataset and models builts above:
+### 1) Decision Tree
+```{r predtest, echo=FALSE}
+predictionDT <- predict(modFitDT, testingI)
+predictionDT
+```
+### 2) Random Forest
+```{r predtest2, echo=FALSE}
+predictionRF <- predict(modFitRF, testingI)
+predictionRF
+```
+### 3) Stochastic Gradient Boosting
+```{r predtest3, echo=FALSE}
+predictionBoost <- predict(modFitBoost, testingI)
+predictionBoost
+```
+## Conclusion
+The different experiments above show that the random forest method provides the best fit model as its accuracy is higher, therefore it will be chosen for prediction of 20 different test cases:
+```{r predtest4, echo=FALSE}
+    pred =  predict(modFitRF,testingI,type='class')
+    nofiles = length(pred)
+    for (i in 1:nofiles){
+        filename =  paste0("problem_id",i,".txt")
+        write.table(pred[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+    pred
+```
